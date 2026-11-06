@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { webcrypto } from "node:crypto";
-import { encryptAndUploadDeed } from "../lib/swarm-upload.ts";
+import { decryptDeedInBrowser, encryptAndUploadDeed } from "../lib/swarm-upload.ts";
 
 const config = {
   beeUrl: "https://bee.example.test",
@@ -40,6 +40,17 @@ test("encrypts a PDF in the browser before uploading and returns a decryptable k
   );
   assert.deepEqual(new Uint8Array(decrypted), plaintext);
   assert.equal(result.keyFile.fileName, "deed.pdf");
+  const decryptedDeed = await decryptDeedInBrowser(
+    result.keyFile,
+    { beeUrl: config.beeUrl },
+    async (url, init) => {
+      assert.equal(String(url), `${config.beeUrl}/bytes/${reference}`);
+      assert.equal(init.cache, "no-store");
+      return new Response(request.init.body, { status: 200 });
+    },
+    webcrypto,
+  );
+  assert.deepEqual(new Uint8Array(await decryptedDeed.arrayBuffer()), plaintext);
 });
 
 test("rejects non-PDF files and missing Swarm configuration before upload", async () => {
@@ -58,6 +69,37 @@ test("rejects non-PDF files and missing Swarm configuration before upload", asyn
       webcrypto,
     ),
     /not configured/,
+  );
+  await assert.rejects(
+    encryptAndUploadDeed(
+      new File(["%PDF"], "deed.pdf", { type: "application/pdf" }),
+      { beeUrl: config.beeUrl, postageBatchId: "" },
+      fetcher,
+      webcrypto,
+    ),
+    /postage batch ID/,
+  );
+});
+
+test("rejects malformed references and reports unavailable Swarm downloads", async () => {
+  const keyFile = {
+    version: 1,
+    algorithm: "AES-GCM",
+    reference,
+    key: "AA==",
+    iv: "AA==",
+    fileName: "deed.pdf",
+    contentType: "application/pdf",
+  };
+  await assert.rejects(
+    decryptDeedInBrowser({ ...keyFile, reference: "bad" }, { beeUrl: config.beeUrl }, async () => {
+      assert.fail("fetch must not run for an invalid reference");
+    }, webcrypto),
+    /invalid Swarm reference/,
+  );
+  await assert.rejects(
+    decryptDeedInBrowser(keyFile, { beeUrl: config.beeUrl }, async () => new Response("", { status: 404 }), webcrypto),
+    /Swarm \(404\)/,
   );
 });
 

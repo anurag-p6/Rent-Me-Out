@@ -153,3 +153,18 @@ export async function fetchActiveRoomListings() {
 
   return entities;
 }
+
+export async function fetchRoomListing(entityKey: string) {
+  if (!/^0x[0-9a-f]{64}$/i.test(entityKey)) return null;
+  try {
+    const entity = await arkivPublicClient.getEntity(
+      entityKey as `0x${string}`,
+      RoomListingSchema,
+    );
+    if (entity.status.value !== "available") return null;
+    if (Number(entity.endAt.value) <= Math.floor(Date.now() / 1000)) return null;
+    return entity;
+  } catch {
+    return null;
+  }
+}

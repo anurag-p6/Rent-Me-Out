@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { fetchActiveRoomListings } from "@/lib/arkiv";
+import { toPublicArkivRoom } from "@/lib/arkiv-listings";
 import { RoomCard, type RoomCardData } from "./room-card";
 
 export function MarketplaceClient({ rooms }: { rooms: RoomCardData[] }) {
@@ -16,33 +17,9 @@ export function MarketplaceClient({ rooms }: { rooms: RoomCardData[] }) {
     fetchActiveRoomListings()
       .then((entities) => {
         if (!active) return;
-        const fetchedRooms = entities.map((entity, index): RoomCardData => {
-          const startDate = new Date(Number(entity.startAt.value) * 1000)
-            .toISOString()
-            .slice(0, 10);
-          const endDate = new Date(Number(entity.endAt.value) * 1000)
-            .toISOString()
-            .slice(0, 10);
-
-          return {
-            id: entity.roomId.value,
-            tokenId: entity.$key,
-            name: entity.roomName.value,
-            note: entity.description.value,
-            price: Number(entity.price.value),
-            state: "available",
-            validFrom: startDate,
-            validUntil: endDate,
-            tint: `var(--room-${(index % 3) + 1})`,
-            propertyId: entity.propertyId.value,
-            propertyName: entity.propertyName.value,
-            locality: entity.locality.value,
-            city: entity.city.value,
-            periodLabel: `${startDate} – ${endDate}`,
-            propertyApproved: false,
-            arkivRecord: true,
-          };
-        });
+        const fetchedRooms: RoomCardData[] = entities.map((entity, index) =>
+          toPublicArkivRoom(entity, index),
+        );
         setArkivRooms(fetchedRooms);
         setArkivStatus("ready");
       })

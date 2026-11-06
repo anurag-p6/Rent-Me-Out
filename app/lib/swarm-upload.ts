@@ -40,6 +40,9 @@ export async function encryptAndUploadDeed(
   if (!beeUrl) {
     throw new Error("Swarm upload is not configured. Set the Bee URL.");
   }
+  if (!/^[0-9a-f]{64}$/i.test(postageBatchId)) {
+    throw new Error("Swarm uploads require a 64-character postage batch ID. Configure NEXT_PUBLIC_SWARM_POSTAGE_BATCH_ID.");
+  }
 
   let endpoint: URL;
   try {
@@ -68,11 +71,7 @@ export async function encryptAndUploadDeed(
   const headers: Record<string, string> = {
     "Content-Type": "application/octet-stream",
   };
-  // The public Swarm API gateway can sponsor demo uploads; self-hosted Bee
-  // endpoints use the uploader's postage batch.
-  if (postageBatchId) {
-    headers["Swarm-Postage-Batch-Id"] = postageBatchId;
-  }
+  headers["Swarm-Postage-Batch-Id"] = postageBatchId;
 
   const response = await fetcher(endpoint, {
     method: "POST",
@@ -132,7 +131,15 @@ export async function decryptDeedInBrowser(
     throw new Error("The key file has an invalid Swarm reference.");
   }
 
-  const endpoint = new URL(beeUrl);
+  let endpoint: URL;
+  try {
+    endpoint = new URL(beeUrl);
+  } catch {
+    throw new Error("The configured Swarm Bee URL is invalid.");
+  }
+  if (endpoint.protocol !== "https:" && endpoint.hostname !== "localhost" && endpoint.hostname !== "127.0.0.1") {
+    throw new Error("Use HTTPS for the Swarm Bee endpoint outside local development.");
+  }
   endpoint.pathname = `${endpoint.pathname.replace(/\/$/, "")}/bytes/${keyFile.reference}`;
   endpoint.search = "";
   endpoint.hash = "";

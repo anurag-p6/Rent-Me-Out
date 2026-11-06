@@ -14,13 +14,30 @@ import {
 } from "@/lib/data";
 import { readRoom } from "@/lib/chain/registry";
 import { recordToRoom } from "@/lib/chain/to-room";
+import { fetchRoomListing } from "@/lib/arkiv";
+import { isArkivListingKey, toPublicArkivRoom } from "@/lib/arkiv-listings";
+import type { RoomCardData } from "@/components/marketplace/room-card";
 
 /**
  * A numeric id is a real listing, read from the registry. Anything else is one of the
  * sample rooms, kept so older demo links still resolve -- but those cannot be bought,
  * because they have no on-chain listing behind them.
  */
-async function loadRoom(roomId: string): Promise<{ room: Room | null; live: boolean }> {
+async function loadRoom(roomId: string): Promise<{
+  room: Room | null;
+  live: boolean;
+  arkivListing?: RoomCardData;
+}> {
+  if (isArkivListingKey(roomId)) {
+    const entity = await fetchRoomListing(roomId);
+    if (!entity) return { room: null, live: false };
+    const listing = toPublicArkivRoom(entity);
+    return {
+      room: listing,
+      live: false,
+      arkivListing: listing,
+    };
+  }
   if (/^\d+$/.test(roomId)) {
     try {
       const record = await readRoom(BigInt(roomId));
@@ -35,8 +52,6 @@ async function loadRoom(roomId: string): Promise<{ room: Room | null; live: bool
 type PageProps = {
   params: Promise<{ roomId: string }>;
 };
-
-export const dynamicParams = false;
 
 export function generateStaticParams() {
   return rooms.map((room) => ({ roomId: room.id }));
@@ -55,10 +70,53 @@ export async function generateMetadata({
 
 export default async function RoomDetailPage({ params }: PageProps) {
   const { roomId } = await params;
-  const { room, live } = await loadRoom(roomId);
+  const { room, live, arkivListing } = await loadRoom(roomId);
   if (!room) notFound();
 
   const index = Math.max(0, rooms.findIndex((entry) => entry.id === roomId));
+
+  if (arkivListing) {
+    return (
+      <div className="shell section section--tight">
+        <div className="between" style={{ marginBottom: 24 }}>
+          <Link href="/marketplace" className="text-link">All rooms</Link>
+          <StatusStamp state="available" />
+        </div>
+        <div className="detail-grid">
+          <div>
+            <div className="detail-visual"><RoomGlyph index={index} state="available" /></div>
+            <div className="detail-copy" style={{ marginTop: 30 }}>
+              <p className="eyebrow">{arkivListing.propertyName} · {arkivListing.locality}, {arkivListing.city}</p>
+              <h1>{arkivListing.name}</h1>
+              <p className="lede">{arkivListing.note || "Public room listing"}</p>
+              <div className="detail-meta">
+                <div><span className="micro">Rights period</span><strong>{arkivListing.periodLabel}</strong></div>
+                <div><span className="micro">One-time price</span><strong>{formatUsdc(arkivListing.price)} USDC</strong></div>
+                <div><span className="micro">Arkiv entity</span><strong className="mono">{arkivListing.tokenId}</strong></div>
+                <div><span className="micro">Owner</span><strong className="mono">Public wallet listing</strong></div>
+              </div>
+              <div className="notice notice--brass" style={{ marginTop: 24 }}>
+                <div>
+                  <strong>Public Arkiv discovery record</strong>
+                  <p>This record makes the listing discoverable. It does not prove registrar approval, create a Hedera right, or accept payment. Confirm those separately before relying on this listing.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <aside className="buy-panel">
+            <div className="buy-panel__head">
+              <span className="badge badge--quiet">Arkiv discovery · not purchasable</span>
+              <div className="buy-panel__price" style={{ marginTop: 16 }}>{formatUsdc(arkivListing.price)} <small>USDC / period</small></div>
+            </div>
+            <div className="buy-panel__body">
+              <p className="buy-panel__note">Purchases are disabled until this public listing is connected to an active RentalRegistry listing and the owner receives a payment settlement.</p>
+              <Link href="/marketplace" className="btn btn--wide">Back to marketplace</Link>
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="shell section section--tight">

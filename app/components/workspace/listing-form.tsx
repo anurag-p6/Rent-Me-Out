@@ -239,7 +239,7 @@ export function ListingForm() {
                     </p>
                   </div>
                     <Link
-                    href={`/marketplace/${room.id}`}
+                    href={`/marketplace/${createdRecords.find((record) => record.roomId === room.id)?.entityKey ?? room.id}`}
                     className="text-link"
                     style={{ fontSize: 11.5 }}
                   >
